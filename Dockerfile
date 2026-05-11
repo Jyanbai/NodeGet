@@ -1,47 +1,16 @@
 # syntax=docker/dockerfile:1
+# Modified Dockerfile: use Debian-based Rust image for compilation
+# to avoid musl libc renameat2 issue on Alpine 3.22
 
-ARG ALPINE_VERSION=3.22
-ARG RUST_IMAGE=rustlang/rust:nightly-alpine3.22
-
-FROM alpine:${ALPINE_VERSION} AS release-binary
-
-ARG NODEGET_VERSION=latest
-ARG NODEGET_RELEASE_REPO=GenshinMinecraft/NodeGet
-ARG TARGETARCH
-ARG TARGETVARIANT
-
-RUN apk add --no-cache ca-certificates curl
-
-RUN set -eux; \
-    docker_target="${TARGETARCH}${TARGETVARIANT}"; \
-    if [ -z "${docker_target}" ]; then \
-        docker_target="$(apk --print-arch)"; \
-    fi; \
-    case "${docker_target}" in \
-        amd64* | x86_64) asset="nodeget-server-linux-x86_64-musl" ;; \
-        arm64* | aarch64) asset="nodeget-server-linux-aarch64-musl" ;; \
-        armv7) asset="nodeget-server-linux-armv7-musleabihf" ;; \
-        *) \
-            echo "Unsupported Docker target: ${docker_target}. Supported: linux/amd64, linux/arm64, linux/arm/v7" >&2; \
-            exit 1; \
-            ;; \
-    esac; \
-    if [ "${NODEGET_VERSION}" = "latest" ]; then \
-        release_path="latest/download"; \
-    else \
-        release_path="download/${NODEGET_VERSION}"; \
-    fi; \
-    mkdir -p /out; \
-    curl -fsSL --retry 5 --retry-delay 2 \
-        "https://github.com/${NODEGET_RELEASE_REPO}/releases/${release_path}/${asset}" \
-        -o /out/nodeget-server; \
-    chmod 0755 /out/nodeget-server
-
-FROM ${RUST_IMAGE} AS source-binary
+FROM rust:1.83-bookworm AS source-binary
 
 WORKDIR /src
 
-RUN apk add --no-cache build-base clang clang-dev git musl-dev pkgconf
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY . .
 
@@ -50,14 +19,17 @@ RUN cargo build --package nodeget-server --profile minimal --locked \
     && cp target/minimal/nodeget-server /out/nodeget-server \
     && chmod 0755 /out/nodeget-server
 
-FROM alpine:${ALPINE_VERSION} AS runtime-base
+FROM debian:bookworm-slim AS runtime
 
 LABEL org.opencontainers.image.title="NodeGet Server"
-LABEL org.opencontainers.image.description="NodeGet server runtime image based on Alpine Linux"
-LABEL org.opencontainers.image.source="https://github.com/GenshinMinecraft/NodeGet"
+LABEL org.opencontainers.image.description="NodeGet server runtime image (self-built fork)"
+LABEL org.opencontainers.image.source="https://github.com/Jyanbai/NodeGet"
 LABEL org.opencontainers.image.licenses="AGPL-3.0"
 
-RUN apk add --no-cache ca-certificates tzdata \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    tzdata \
+    && rm -rf /var/lib/apt/lists/* \
     && update-ca-certificates \
     && mkdir -p /etc/nodeget /var/lib/nodeget
 
@@ -74,13 +46,7 @@ ENV NODEGET_PORT="2211" \
 
 EXPOSE 2211
 
-ENTRYPOINT ["/usr/local/bin/nodeget-entrypoint"]
-CMD ["serve"]
-
-FROM runtime-base AS runtime-release
-COPY --from=release-binary /out/nodeget-server /usr/local/bin/nodeget-server
-
-FROM runtime-base AS runtime-source
 COPY --from=source-binary /out/nodeget-server /usr/local/bin/nodeget-server
 
-FROM runtime-release AS runtime
+ENTRYPOINT ["/usr/local/bin/nodeget-entrypoint"]
+CMD ["serve"]
