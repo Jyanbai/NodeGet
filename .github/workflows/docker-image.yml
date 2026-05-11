@@ -16,7 +16,7 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/nodeget
-  RUST_IMAGE: rustlang/rust:alpine3.22
+  RUST_IMAGE: rustlang/rust:nightly-alpine3.22
 
 jobs:
   build-and-push:
