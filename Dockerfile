@@ -2,7 +2,7 @@
 # Modified Dockerfile: use Debian-based Rust image for compilation
 # to avoid musl libc renameat2 issue on Alpine 3.22
 
-FROM rust:1.83-bookworm AS source-binary
+FROM rust:1.86-bookworm AS source-binary
 
 WORKDIR /src
 
