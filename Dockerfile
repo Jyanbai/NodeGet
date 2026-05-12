@@ -19,7 +19,7 @@ RUN cargo build --package nodeget-server --profile minimal --locked \
     && cp target/minimal/nodeget-server /out/nodeget-server \
     && chmod 0755 /out/nodeget-server
 
-FROM debian:bookworm-slim AS runtime
+FROM debian:trixie-slim AS runtime
 
 LABEL org.opencontainers.image.title="NodeGet Server"
 LABEL org.opencontainers.image.description="NodeGet server runtime image (self-built fork)"
